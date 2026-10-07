@@ -2,10 +2,14 @@ import pandas as pd
 from surprise import dump
 
 class SVD_pipeline:
-    def __init__(self,model_path,ratings_path,movies_path):
+    def __init__(self,model_path:str ,ratings_path:str ,movies_path:str , min_year: int | None = None):
         _, self.model = dump.load(model_path)
         
         self.movies_df = pd.read_csv(movies_path)
+        # Applying year filter if user asked  
+        if min_year is not None:
+            self.movies_df = self.movies_df[self.movies_df['year'] >= min_year].copy() 
+             
         self.ratings_df = pd.read_csv(ratings_path)
         self.all_movies_id = set(self.movies_df['movieId'].unique())
         
