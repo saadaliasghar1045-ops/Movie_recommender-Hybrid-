@@ -36,6 +36,6 @@ class SVD_pipeline:
         # now we will merge it based on movieId so that all features of preicted movies be obtained like author and release year
         final_df = pd.merge(top_movies_df,self.movies_df,on='movieId',how='inner') 
         
-        return final_df[['movieId', 'title', 'genres', 'predicted_rating']]
+        return final_df[['movieId', 'title', 'genres', 'predicted_rating','year']]
 
         
