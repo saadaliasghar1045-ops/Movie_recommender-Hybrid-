@@ -2,28 +2,37 @@ import pandas as pd
 from surprise import dump
 
 class SVD_pipeline:
-    def __init__(self,model_path:str ,ratings_path:str ,movies_path:str , min_year: int | None = None):
+    def __init__(self,model_path:str ,ratings_path:str ,movies_path:str ):
         _, self.model = dump.load(model_path)
         
-        self.movies_df = pd.read_csv(movies_path)
-        # Applying year filter if user asked  
-        if min_year is not None:
-            self.movies_df = self.movies_df[self.movies_df['year'] >= min_year].copy() 
-             
+        self.movies_df = pd.read_csv(movies_path) 
         self.ratings_df = pd.read_csv(ratings_path)
         self.all_movies_id = set(self.movies_df['movieId'].unique())
+    
         
-    def get_user_unrated_movies(self,uid) :
+    def get_user_unrated_movies(self,uid,min_year=None) :
+        
+        # copying these into new variables so that the original frames do not permanently filtered because in fastapi app I am calling the pipe line just one time not every time when user posted the request
+        movies_df = self.movies_df
+        all_movies_id = set(self.movies_df['movieId'].unique())
+        
+        # Applying year filter if user asked
+        if min_year is not None :
+            movies_df = self.movies_df[self.movies_df['year'] >= min_year].copy()
+            all_movies_id = set(movies_df['movieId'].unique())
+            
         user_ratings = self.ratings_df[self.ratings_df['userId'] == uid]
         
         if user_ratings.empty:
-            return list(self.all_movies_id)
+            return list(all_movies_id)
         
         user_rated_movies = set(user_ratings['movieId'].unique())
-        return list(self.all_movies_id - user_rated_movies)
+        
+        return list(all_movies_id - user_rated_movies)
     
-    def get_n_recommendations(self,uid,n:int = 10):
-        unrated_movies_id = self.get_user_unrated_movies(uid)
+    # recommendation function 
+    def get_n_recommendations(self,uid,n:int = 10 , min_year : int |None = None):
+        unrated_movies_id = self.get_user_unrated_movies(uid,min_year)
         predictions = [self.model.predict(uid,movie_id) for movie_id in unrated_movies_id ]
         
         predictions.sort(key = lambda x : x.est , reverse=True ) # key means what value to sort by 
@@ -31,7 +40,7 @@ class SVD_pipeline:
         
         # predictions on movies obtained now we will separate movies id and the estimated score from them 
         top_data = [
-            {"movieId": pred.iid, "predicted_rating": round(pred.est, 2)} 
+            {"movieId": pred.iid , "predicted_rating": round(pred.est, 2)} 
             for pred in top_predictions
         ]
         
@@ -40,6 +49,6 @@ class SVD_pipeline:
         # now we will merge it based on movieId so that all features of preicted movies be obtained like author and release year
         final_df = pd.merge(top_movies_df,self.movies_df,on='movieId',how='inner') 
         
-        return final_df[['movieId', 'title', 'genres', 'predicted_rating','year']]
+        return final_df[['movieId', 'title','predicted_rating','year']]
 
         
