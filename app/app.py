@@ -44,8 +44,8 @@ async def get_movie_details(tmdb_id: int):
 
     if response.status_code != 200:
         raise HTTPException(
-            status_code=500,
-            detail="Failed to fetch movie data from TMDB"
+            status_code=response.status_code,
+            detail=response.text
         )
 
     movie = response.json()
@@ -78,7 +78,5 @@ async def get_movie_details(tmdb_id: int):
 @app.get('/predict')
 async def greet(uid : int , num : int = 60 , year_filt : int|None = None ):
     recommendations = my_pipe_line.get_n_recommendations(uid=uid,n=num,min_year=year_filt)
-    merged_records = pd.merge(recommendations,links_df,on='movieId',how='left') 
     records = recommendations.to_dict(orient="records")
-
     return records
