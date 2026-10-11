@@ -7,8 +7,9 @@ class Content_pipeline :
 
     def __init__ (
         self,
+        # here I am using content_df not frame_content_filt_for_desc and title separately because these two are totally identical the main difference is in content column so any one from desc and title can be used as content_df to searc and get index and apply year filter
         content_df : pd.DataFrame,
-        org_df :pd.DataFrame,
+        movies_info_df :pd.DataFrame,
         vectorizer_for_title_search,
         vectorizer_for_description,
         tfidf_matrix_for_title_search,
@@ -17,7 +18,7 @@ class Content_pipeline :
     ):
         # data frames
         self.content_df = content_df.copy()
-        self.org_df = org_df
+        self.movies_info_df = movies_info_df
         # vectorizers
         self.vectorizer_for_title_search = vectorizer_for_title_search
         self.vectorizer_for_description = vectorizer_for_description
@@ -58,7 +59,7 @@ class Content_pipeline :
         top_matched_idxs = t_similarity.argsort()[::-1][:3]
         
         top_matched_t = df.iloc[top_matched_idxs]['title']
-        return top_matched_t.to_numpy()
+        return top_matched_t.tolist()
     
     def temp_find_similar_by_title(self , inp_title , n_recoms : int = 20 , limit_year : int | None = None):
 
@@ -73,7 +74,7 @@ class Content_pipeline :
             t_tfidf_matrix=self.tfidf_matrix_for_title_search
         )
         
-        n_matched_titles = matched_titles.shape[0]
+        n_matched_titles = len(matched_titles)
 
         if n_matched_titles != 0:
             
@@ -144,7 +145,7 @@ class Content_pipeline :
         return rec_movs
         
     # matching movies based on top of description
-    def find_similar_by_description(self,inpt_desc : str ,n_recoms : int  = 20, limit_year : int|None = None  ):
+    def find_similar_by_description(self,inpt_desc : str ,n_recoms : int  = 20, limit_year : int | None = None  ):
         # converting movie description into vector
         inp_desc_vect = self.vectorizer_for_description.transform([inpt_desc.lower()])
         desc_similarity = cosine_similarity(
@@ -166,5 +167,7 @@ class Content_pipeline :
         return top_recoms
              
     def get_movies_info(self,predicted):
-        movies_info = pd.merge(predicted,self.org_df,on='movieId',how='left')
+        movies_info = pd.merge(predicted,self.movies_info_df,on='movieId',how='left')
+        movies_info.drop(columns=['movieId'],inplace=True)
         return movies_info
+        

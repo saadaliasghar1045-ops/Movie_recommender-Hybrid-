@@ -1,82 +1,79 @@
 from fastapi import FastAPI,HTTPException
-from src.pipelines.svd_pipe_line import SVD_pipeline
+from src.pipelines.content_pipeline import Content_pipeline
+from app.schemas.recommendation_input import recommendation_input
+from app.schemas.title_match_inp import title_match_inp
+import joblib
 import httpx
 import pandas as pd 
 import os
-from dotenv import load_dotenv
-
-load_dotenv()
-
-TMDB_API_KEY = os.getenv("TMDB_API_KEY")
 
 pl_paths = {
-    'model':'src/models/colab_filt_svd',
-    'ratings':'src/datasets/ratings.csv',
-    'movies':'src/datasets/movies.csv'
+    'desc_vectorizer':'src/vectorizers_and_matrices/vectorizer_for_description.joblib',
+    'title_search_vectorizer':'src/vectorizers_and_matrices/vectorizer_for_title_search.joblib',
+    'desc_tfidf':'src/vectorizers_and_matrices/tfidf_matrix_for_description.joblib',
+    'title_search_tfidf':'src/vectorizers_and_matrices/tfidf_matrix_for_title_search.joblib',
+    'title_tfidf':'src/vectorizers_and_matrices/tfidf_matrix_for_title.joblib',
+    'content_df':'src/datasets_for_app/frame_of_content_filt_for_title.csv',
+    'movies_info_df':'src/datasets_for_app/movies_info.csv',
+    'top_movies':'src/datasets_for_app/top_movies.csv'
 }
 
-my_pipe_line = SVD_pipeline(pl_paths['model'],pl_paths['ratings'],pl_paths['movies'])
-links_df = pd.read_csv(r'src/datasets/links.csv')
+# vectorizers and matrices 
+desc_vectorizer = joblib.load(pl_paths['desc_vectorizer'])
+title_search_vectorizer = joblib.load(pl_paths['title_search_vectorizer'])
+desc_tfidf = joblib.load(pl_paths['desc_tfidf'])
+title_search_tfidf = joblib.load(pl_paths['title_search_tfidf'])
+title_tfidf = joblib.load(pl_paths['title_tfidf'])
+
+# data frames 
+content_df = pd.read_csv(pl_paths['content_df'])
+movie_info_df = pd.read_csv(pl_paths['movies_info_df'])
+top_movies = pd.read_csv(pl_paths['top_movies'])
+
+recom_pipeline = Content_pipeline(
+    content_df=content_df,
+    movies_info_df=movie_info_df,
+    vectorizer_for_description=desc_vectorizer,
+    vectorizer_for_title_search=title_search_vectorizer,
+    tfidf_matrix_for_description=desc_tfidf,
+    tfidf_matrix_for_title_search=title_search_tfidf,
+    tfidf_matrix_for_title=title_tfidf
+)
 
 ##############################
 
 app = FastAPI()
 
-# Endpoint to return the data of movie predicted 
-@app.get("/movies/{tmdb_id}")
-async def get_movie_details(tmdb_id: int):
-
-    url = f"https://api.themoviedb.org/3/movie/{tmdb_id}"
-
-    params = {
-        "api_key": TMDB_API_KEY,
-        "language": "en-US"
-    }
-
-    async with httpx.AsyncClient() as client:
-        response = await client.get(url, params=params)
-
-    if response.status_code == 404:
-        raise HTTPException(
-            status_code=404,
-            detail="Movie not found"
-        )
-
-    if response.status_code != 200:
-        raise HTTPException(
-            status_code=response.status_code,
-            detail=response.text
-        )
-
-    movie = response.json()
-
-    poster_path = movie.get("poster_path")
-    backdrop_path = movie.get("backdrop_path")
-
-    poster_url = (
-        f"https://image.tmdb.org/t/p/w500{poster_path}"
-        if poster_path
-        else None
-    )
-
-    backdrop_url = (
-        f"https://image.tmdb.org/t/p/w1280{backdrop_path}"
-        if backdrop_path
-        else None
-    )
-
-    return {
-        "tmdbId": movie["id"],
-        "title": movie["title"],
-        "overview": movie["overview"],
-        "release_date": movie["release_date"],
-        "poster_url": poster_url,
-        "backdrop_url": backdrop_url
-    }
+@app.get('/home')
+async def greet():
+    return 'content based movie recommender creaeted by saad ali asghar'
     
+@app.post('/recommend')
+async def recommend(recommendation_input : recommendation_input):
+    if recommendation_input.by_description :
+        mov_sim_by_desc = recom_pipeline.find_similar_by_description(
+            inpt_desc= recommendation_input.inp_text,
+            limit_year=recommendation_input.limit_year,
+            n_recoms=recommendation_input.n_recoms
+        )
+        mov_sim_by_desc_info = recom_pipeline.get_movies_info(mov_sim_by_desc).to_dict(orient="records")
+        return mov_sim_by_desc_info
+        
+    else : 
+        mov_sim_by_title = recom_pipeline.find_similar_by_title(
+            inp_title=recommendation_input.inp_text,
+            limit_year=recommendation_input.limit_year,
+            n_recoms=recommendation_input.n_recoms
+        )
+        mov_sim_by_title_info = recom_pipeline.get_movies_info(mov_sim_by_title).to_dict(orient="records")
+        return mov_sim_by_title_info
     
-@app.get('/predict')
-async def greet(uid : int , num : int = 60 , year_filt : int|None = None ):
-    recommendations = my_pipe_line.get_n_recommendations(uid=uid,n=num,min_year=year_filt)
-    records = recommendations.to_dict(orient="records")
-    return records
+@app.post('/match_title')
+async def match_title(title_match_inp : title_match_inp):
+    matched_titles = recom_pipeline.get_matched(
+        title=title_match_inp.title,
+        t_tfidf_matrix=title_search_tfidf,
+        title_vectorizer=title_search_vectorizer,
+        df=content_df
+    )
+    return matched_titles
