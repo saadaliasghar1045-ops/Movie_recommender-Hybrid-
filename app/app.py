@@ -77,3 +77,7 @@ async def match_title(title_match_inp : title_match_inp):
         df=content_df
     )
     return matched_titles
+
+@app.post('/trending')
+async def trending():
+    return top_movies.to_dict(orient="records")
