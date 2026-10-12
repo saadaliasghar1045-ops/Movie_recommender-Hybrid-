@@ -101,7 +101,7 @@ async def match_title(title_match_inp : title_match_inp):
 async def trending():
     return top_movies.to_dict(orient="records")
 
-@app.get('/movie_info{tmdb_id}')
+@app.get('/movie_info/{tmdb_id}')
 async def movie_info(tmdb_id : int):
     url = f"https://api.themoviedb.org/3/movie/{tmdb_id}"
     
